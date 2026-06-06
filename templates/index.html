@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IMDb Rating Predictor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --gold:    #e8b84b;
+      --gold-dim:#c9963a;
+      --bg:      #0d0d0f;
+      --surface: #14141a;
+      --border:  #2a2a38;
+      --text:    #e8e8f0;
+      --muted:   #7a7a90;
+      --error:   #e05555;
+      --radius:  10px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 20px 80px;
+    }
+
+    /* ── Grain overlay ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container { position: relative; z-index: 1; width: 100%; max-width: 700px; }
+
+    /* ── Header ── */
+    header { text-align: center; margin-bottom: 52px; }
+
+    .logo-strip {
+      display: inline-block;
+      background: var(--gold);
+      color: #000;
+      font-family: 'Playfair Display', serif;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 4px;
+      padding: 5px 14px;
+      border-radius: 3px;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 400;
+      line-height: 1.2;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+
+    h1 span { color: var(--gold); font-style: italic; }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+    }
+
+    /* ── Section titles ── */
+    .section-label {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── Grid layout ── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .full   { grid-column: 1 / -1; }
+
+    /* ── Field ── */
+    .field { display: flex; flex-direction: column; gap: 7px; }
+
+    label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+    }
+
+    label .required { color: var(--gold); margin-right: 2px; }
+
+    input, textarea, select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 300;
+      padding: 11px 14px;
+      width: 100%;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+
+    input::placeholder, textarea::placeholder { color: var(--muted); font-size: 13px; }
+
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 3px rgba(232,184,75,0.12);
+    }
+
+    textarea { resize: vertical; min-height: 90px; }
+
+    select option { background: var(--surface); }
+
+    /* ── Separator ── */
+    .sep { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+
+    /* ── Submit button ── */
+    .btn-predict {
+      width: 100%;
+      background: var(--gold);
+      color: #000;
+      border: none;
+      border-radius: var(--radius);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: 1px;
+      padding: 16px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      margin-top: 8px;
+    }
+
+    .btn-predict:hover  { background: var(--gold-dim); }
+    .btn-predict:active { transform: scale(0.99); }
+
+    .btn-predict:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* ── Result box ── */
+    #result-box {
+      display: none;
+      margin-top: 28px;
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      text-align: center;
+      animation: fadeUp 0.4s ease;
+    }
+
+    #result-box.success {
+      background: linear-gradient(135deg, rgba(232,184,75,0.08), rgba(232,184,75,0.02));
+      border: 1px solid rgba(232,184,75,0.3);
+    }
+
+    #result-box.error-box {
+      background: rgba(224,85,85,0.07);
+      border: 1px solid rgba(224,85,85,0.3);
+    }
+
+    .result-label {
+      font-size: 11px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .result-score {
+      font-family: 'Playfair Display', serif;
+      font-size: 64px;
+      font-weight: 700;
+      color: var(--gold);
+      line-height: 1;
+    }
+
+    .result-sub {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    .error-msg {
+      color: var(--error);
+      font-size: 14px;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Footer ── */
+    footer {
+      margin-top: 40px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+    }
+
+    @media (max-width: 520px) {
+      .card { padding: 24px 20px; }
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <div class="logo-strip">IMDb</div>
+    <h1>חיזוי דירוג <span>סרטים</span></h1>
+    <p class="subtitle">מודל Elastic Net · אומן על 115,000+ סרטים</p>
+  </header>
+
+  <!-- Form card -->
+  <div class="card">
+
+    <!-- Section: Basic Info -->
+    <p class="section-label">פרטים בסיסיים</p>
+    <div class="grid-2">
+
+      <div class="field">
+        <label for="startYear"><span class="required">*</span>שנת יציאה</label>
+        <input type="number" id="startYear" name="startYear"
+               placeholder="לדוגמה: 2015" min="1900" max="2030" />
+      </div>
+
+      <div class="field">
+        <label for="runtimeMinutes">אורך (דקות)</label>
+        <input type="number" id="runtimeMinutes" name="runtimeMinutes"
+               placeholder="לדוגמה: 120" min="1" />
+      </div>
+
+      <div class="field full">
+        <label for="genres">ז'אנרים</label>
+        <input type="text" id="genres" name="genres"
+               placeholder="לדוגמה: Action, Drama, Thriller" />
+      </div>
+
+    </div>
+
+    <hr class="sep" />
+
+    <!-- Section: Cast & Production -->
+    <p class="section-label">הפקה ושחקנים</p>
+    <div class="grid-2">
+
+      <div class="field">
+        <label for="Country">מדינת הפקה</label>
+        <select id="Country" name="Country">
+          <option value="">— לא ידוע —</option>
+          <option value="United States">United States</option>
+          <option value="India">India</option>
+          <option value="United Kingdom">United Kingdom</option>
+          <option value="France">France</option>
+          <option value="Italy">Italy</option>
+          <option value="Canada">Canada</option>
+          <option value="Spain">Spain</option>
+          <option value="other">אחר</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="Language">שפה</label>
+        <select id="Language" name="Language">
+          <option value="">— לא ידוע —</option>
+          <option value="English">English</option>
+          <option value="Hindi">Hindi</option>
+          <option value="Tamil">Tamil</option>
+          <option value="Telugu">Telugu</option>
+          <option value="French">French</option>
+          <option value="Spanish">Spanish</option>
+          <option value="Italian">Italian</option>
+          <option value="German">German</option>
+          <option value="other">אחר</option>
+        </select>
+      </div>
+
+      <div class="field full">
+        <label for="lead_actors_ids">מזהי שחקנים ראשיים (nm…)</label>
+        <input type="text" id="lead_actors_ids" name="lead_actors_ids"
+               placeholder="לדוגמה: ['nm0000148', 'nm0000204']" />
+      </div>
+
+    </div>
+
+    <hr class="sep" />
+
+    <!-- Section: Additional -->
+    <p class="section-label">מידע נוסף</p>
+    <div class="grid-2">
+
+      <div class="field">
+        <label for="budget">תקציב ($)</label>
+        <input type="number" id="budget" name="budget"
+               placeholder="לדוגמה: 50000000" min="0" />
+      </div>
+
+      <div class="field full">
+        <label for="plot">תקציר עלילה</label>
+        <textarea id="plot" name="plot"
+                  placeholder="כתוב כמה מילים על עלילת הסרט…"></textarea>
+      </div>
+
+    </div>
+
+    <hr class="sep" />
+
+    <!-- Submit -->
+    <button class="btn-predict" id="predict-btn" onclick="submitPrediction()">
+      Predict Rating
+    </button>
+
+    <!-- Result -->
+    <div id="result-box">
+      <div class="result-label" id="result-label"></div>
+      <div class="result-score" id="result-score"></div>
+      <div class="result-sub" id="result-sub"></div>
+    </div>
+
+  </div><!-- /card -->
+
+  <footer>כל הנתונים נשארים בדפדפן · לא נשמר מידע</footer>
+</div>
+
+<script>
+  async function submitPrediction() {
+    const btn = document.getElementById('predict-btn');
+    const box = document.getElementById('result-box');
+
+    // ── איסוף ערכים ──
+    const payload = {
+      startYear:       document.getElementById('startYear').value.trim(),
+      runtimeMinutes:  document.getElementById('runtimeMinutes').value.trim(),
+      genres:          document.getElementById('genres').value.trim(),
+      lead_actors_ids: document.getElementById('lead_actors_ids').value.trim(),
+      Country:         document.getElementById('Country').value,
+      Language:        document.getElementById('Language').value,
+      budget:          document.getElementById('budget').value.trim(),
+      plot:            document.getElementById('plot').value.trim(),
+    };
+
+    // ── ולידציה בסיסית בצד הלקוח ──
+    if (!payload.startYear) {
+      showError('נא למלא שנת יציאה.');
+      return;
+    }
+
+    // ── UI: מצב טעינה ──
+    btn.disabled = true;
+    btn.textContent = 'Loading...';
+    box.style.display = 'none';
+
+    try {
+      const res = await fetch('/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        const msg = data.fields
+          ? Object.values(data.fields).join(' | ')
+          : (data.error || 'שגיאה לא ידועה.');
+        showError(msg);
+      } else {
+        showSuccess(data.predicted_rating);
+      }
+
+    } catch (err) {
+      showError('לא ניתן להתחבר לשרת. ודא שהשרת רץ.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Predict Rating';
+    }
+  }
+
+  function showSuccess(score) {
+    const box   = document.getElementById('result-box');
+    const stars = score >= 7 ? '⭐ דירוג גבוה' : score >= 5 ? 'דירוג בינוני' : 'דירוג נמוך';
+    box.className = 'success';
+    document.getElementById('result-label').textContent = 'Predicted Rating:';
+    document.getElementById('result-score').textContent = score.toFixed(2) + ' / 10';
+    document.getElementById('result-sub').textContent   = stars;
+    box.style.display = 'block';
+  }
+
+  function showError(msg) {
+    const box = document.getElementById('result-box');
+    box.className = 'error-box';
+    document.getElementById('result-label').textContent = '';
+    document.getElementById('result-score').innerHTML   =
+      `<span class="error-msg">${msg}</span>`;
+    document.getElementById('result-sub').textContent   = '';
+    box.style.display = 'block';
+  }
+</script>
+</body>
+</html>
